@@ -76,12 +76,19 @@ const Iax = {
     processRegRequest(inMsg, senderInfo) {
         let verifyRegReq = false;
 
+        /*
+            Check to see if this is an initial REGREQ, or an MD5 salted one.
+            The first request from Asterisk is REGREQ, which the server responds
+            with an MD5 challenge. Asterisk then adds the challenge to the beginning
+            of the password, hashes it again, and does another REGREQ.
+         */
         _.each(inMsg.infoElements, (v) => {
             if (v.type === this.IE.MD5CHALLENGERESP) {
                 verifyRegReq = true;
             }
         });
 
+        // Authenticate with the MD5 challenge hashed password against our DB
         if (verifyRegReq) {
             console.log("#!?!?!?! VERIFYREGREQUEST ?!?!?!?!?");
             return this.verifyRegRequest(inMsg, senderInfo);
