@@ -1,5 +1,6 @@
 'use strict'
 
+require('dotenv').config()
 const Server = require('./lib/Server.js');
 const RegisterApi = require('./lib/RegisterApi.js');
 const _ = require('lodash');
@@ -30,7 +31,9 @@ const Iax = {
         MD5CHALLENGERESP: 16,
         PEERADDRESS: 18,
         REFRESH: 19,
+        CAUSE: 22,
         DATETIME: 31,
+        CAUSECODE: 42,
         CALLTOKEN: 54
     },
     receiveMessage(msg, info) {
@@ -105,13 +108,15 @@ const Iax = {
         let sourceDestArr = new Uint16Array([
             // Turns this into 0x8001. This would normally be easy but JS doesn't have strong typing
             // or I'm stupid
-            this.addBitwise(32768, this.generateRandomNumber(1, 65534)),
+            inMsg.call.dst,
+            // FIXME
+            // this.addBitwise(32768, this.generateRandomNumber(1, 65534)), 
             inMsg.call.src,
             0,
             1
         ]);
 
-        let buffer = Buffer.from(sourceDestArr.buffer).swap16();
+        let buffer = Buffer.from(sourceDestArr.buffer).swap16(); // Swap for Endian
         let randomChallenge = this.generateRandomNumber(100000000, 999999999);
         let username = this.getNode(inMsg.infoElements);
 
@@ -144,7 +149,7 @@ const Iax = {
             1
         ]);
 
-        let buffer = Buffer.from(sourceDestArr.buffer).swap16();
+        let buffer = Buffer.from(sourceDestArr.buffer).swap16(); // Swap for Endian
         let username = this.getNode(inMsg.infoElements);
 
         // Parse IP for sending back PEERADDRESS
@@ -195,7 +200,24 @@ const Iax = {
 
     },
     regReleaseResponse(inMsg, senderInfo) {
+        let sourceDestArr = new Uint16Array([
+            inMsg.call.dest,
+            inMsg.call.src,
+            0,
+            1
+        ]);
 
+        let buffer = Buffer.from(sourceDestArr.buffer).swap16(); // Swap for Endian
+
+        let outMsg = new Uint8Array([
+            inMsg.call.outboundSeqNo,
+            inMsg.call.inboundSeqNo,
+            6, // IAX
+            this.CMD.PONG,
+        ]);
+
+        let outMsgBuf = Buffer.concat([buffer, Buffer.from(outMsg)]);
+        Server.send(outMsgBuf, senderInfo.address, senderInfo.port);
     },
     /**
      * This command only needs the CMD and nothing else to respond
@@ -211,7 +233,7 @@ const Iax = {
             1
         ]);
 
-        let buffer = Buffer.from(sourceDestArr.buffer).swap16();
+        let buffer = Buffer.from(sourceDestArr.buffer).swap16(); // Swap for Endian
 
         let outMsg = new Uint8Array([
             inMsg.call.outboundSeqNo,
@@ -235,8 +257,8 @@ const Iax = {
         ]);
 
         let tArr = new Uint32Array([inMsg.timeStamp]);
-        let buffer = Buffer.from(sourceDestArr.buffer).swap16();
-        let tBuffer = Buffer.from(tArr.buffer).swap32();
+        let buffer = Buffer.from(sourceDestArr.buffer).swap16(); // Swap for Endian
+        let tBuffer = Buffer.from(tArr.buffer).swap32(); // Swap for Endian
 
         let outMsg = new Uint8Array([
             inMsg.call.outboundSeqNo,
