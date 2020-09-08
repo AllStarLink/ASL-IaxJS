@@ -6,6 +6,7 @@
   "author": "Rob Vella <me@robvella.com>",
   "license": "GPL3",
   "dependencies": {
+    "axios": "^0.20.0",
     "dgram": "^1.0.1",
     "lodash": "^4.17.20",
     "network-byte-order": "^0.2.0",
