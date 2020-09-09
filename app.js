@@ -15,6 +15,7 @@ const Iax = {
         PING: 2,
         PONG: 3,
         ACK: 4,
+        INVAL: 10,
         LAGRQ: 11,
         LAGRP: 12,
         REGREQ: 13,
@@ -24,7 +25,7 @@ const Iax = {
         REGREL: 17,
         VNAK: 18,
         POKE: 30,
-        CALLTOKEN: 40
+        CALLTOKEN: 40,
     },
     IE: {
         USERNAME: 6,
@@ -40,7 +41,7 @@ const Iax = {
         CALLTOKEN: 54,
     },
     receiveMessage(msg, info) {
-        console.log("##############################################");
+        console.log("##############################################".blue);
         console.log('Received %d bytes from %s:%d', msg.length, info.address, info.port);
         // console.log(msg.toString('hex'));
 
@@ -80,6 +81,10 @@ const Iax = {
         if (inMsg.retransmit) {
             this.lagOrAckResponse(inMsg, true);
         }
+        
+        if (!inMsg.call.new && [this.CMD.VNAK].indexOf(inMsg.cmdType) !== -1) {
+            --inMsg.call.inboundSeqNo;
+        }
 
         switch (inMsg.cmdType) {
             case this.CMD.REGREQ:
@@ -104,7 +109,7 @@ const Iax = {
                 break;
         }
 
-        console.log('##############################################');
+        console.log('##############################################'.blue);
     },
     processRegRequest(inMsg) {
         let challengeResponse = false;
@@ -271,18 +276,30 @@ const Iax = {
         // Not sure if this is the best approach. May refactor later.
         if (ack && resetCallSeq) {
             Call.resetCallSeq(inMsg);
-            ++inMsg.call.inboundSeqNo;
-        }
+        } 
 
         let outMsg = new Uint8Array([
-            inMsg.call.outboundSeqNo++,
-            inMsg.call.inboundSeqNo,
+            inMsg.outboundSeqNo,
+            inMsg.inboundSeqNo,
             6, // IAX
             (ack ? this.CMD.ACK : this.CMD.LAGRP)
         ]);
 
         let outMsgBuf = Buffer.concat([this.getResponseBuf(inMsg, true), Buffer.from(outMsg)]);
         Server.send(outMsgBuf, inMsg.senderInfo.address, inMsg.senderInfo.port);
+    },
+    invalResponse(inMsg) {
+        let outMsg = new Uint8Array([
+            inMsg.call.outboundSeqNo,
+            inMsg.call.inboundSeqNo,
+            6,
+            this.CMD.INVAL
+        ])
+        
+        let outMsgBuf = Buffer.concat([this.getResponseBuf(inMsg, true), Buffer.from(outMsg)]);
+        Server.send(outMsgBuf, inMsg.senderInfo.address, inMsg.senderInfo.port);
+        console.error(`INVAL Sent to ${inMsg.call.scall}`.bgRed.white);
+        Call.deleteCall(inMsg);
     },
     receiveAck(inMsg) {
         if (!inMsg.call.new) {
@@ -294,6 +311,7 @@ const Iax = {
     },
     receiveVnak(inMsg) {
         Call.resetCallSeq(inMsg);
+        this.invalResponse(inMsg);
     },
     getResponseBuf(inMsg, sendTheirTimestamp = false) {
         return Buffer.concat([
