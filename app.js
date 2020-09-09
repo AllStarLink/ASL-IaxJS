@@ -228,6 +228,7 @@ const Iax = {
         let outMsg = new Uint8Array(testArr);
         let outMsgBuf = Buffer.concat([buffer, tBuffer, Buffer.from(outMsg)]);
         Server.send(outMsgBuf, inMsg.senderInfo.address, inMsg.senderInfo.port);
+        console.log(`Registered node ${username} at ${inMsg.senderInfo.address}:${inMsg.senderInfo.port}`.magenta);
     },
     regRejectResponse(inMsg) {
         let outMsg = new Uint8Array([
@@ -245,6 +246,8 @@ const Iax = {
         
         let outMsgBuf = Buffer.concat([this.getResponseBuf(inMsg), Buffer.from(outMsg)]);
         Server.send(outMsgBuf, inMsg.senderInfo.address, inMsg.senderInfo.port);
+        let username = this.getNode(inMsg.infoElements);
+        console.log(`Auth rejected for node ${username} at ${inMsg.senderInfo.address}:${inMsg.senderInfo.port}`.magenta);
     },
     regReleaseResponse(inMsg) {
         return this.lagOrAckResponse(inMsg, true, false);
