@@ -268,8 +268,10 @@ const Iax = {
      * @param inMsg.senderInfo
      */
     lagOrAckResponse(inMsg, ack = false, resetCallSeq = true) {
+        // Not sure if this is the best approach. May refactor later.
         if (ack && resetCallSeq) {
             Call.resetCallSeq(inMsg);
+            ++inMsg.call.inboundSeqNo;
         }
 
         let outMsg = new Uint8Array([
