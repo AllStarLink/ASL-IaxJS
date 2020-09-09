@@ -1,14 +1,16 @@
 'use strict'
 
-require('dotenv').config()
+require('dotenv').config();
+
 const Server = require('./lib/Server.js');
 const RegisterApi = require('./lib/RegisterApi.js');
-const _ = require('lodash');
+const Util = require('./lib/Util.js');
+const Call = require('./lib/Call.js');
 
-Server.init(Iax.receiveMessage);
+const _ = require('lodash');
+const colors = require('colors');
 
 const Iax = {
-    calls: [],
     CMD: {
         PING: 2,
         PONG: 3,
@@ -20,6 +22,7 @@ const Iax = {
         REGACK: 15,
         REGREJ: 16,
         REGREL: 17,
+        VNAK: 18,
         POKE: 30,
         CALLTOKEN: 40
     },
@@ -34,56 +37,79 @@ const Iax = {
         CAUSE: 22,
         DATETIME: 31,
         CAUSECODE: 42,
-        CALLTOKEN: 54
+        CALLTOKEN: 54,
     },
     receiveMessage(msg, info) {
-        console.log('Received %d bytes from %s:%d\n', msg.length, info.address, info.port);
-        console.log(msg.toString('hex'));
+        console.log("##############################################");
+        console.log('Received %d bytes from %s:%d', msg.length, info.address, info.port);
+        // console.log(msg.toString('hex'));
 
-        let parsed = {}
-        parsed.scall = this.clearBit(msg.readUIntBE(0, 2));
-        parsed.dcall = this.clearBit(msg.readUIntBE(2, 2));
-        parsed.timeStamp = msg.readUIntBE(4, 4);
-        parsed.outboundSeqNo = msg.readUIntBE(8, 1);
-        parsed.inboundSeqNo = msg.readUIntBE(9, 1);
-        parsed.cmdType = msg.readUIntBE(11, 1);
+        let inMsg = {}
+        inMsg.scall = Util.clearBit(msg.readUIntBE(0, 2));
+        let dcall = msg.readUIntBE(2, 2);
+        inMsg.dcall = Util.clearBit(dcall);
+        inMsg.retransmit = false;
 
-        // console.log('Source Call:', parsed.scall);
-        // console.log('Dest Call:', parsed.dcall);
-        console.log('Timestamp:', parsed.timeStamp);
-        // console.log('Outbound Seq No:', parsed.outboundSeqNo);
-        // console.log('Inbound Seq No:', parsed.inboundSeqNo);
-        console.log('CMD:', this.getCmdType(parsed.cmdType) || "UNKNOWN");
+        // Check for re-transmission
+        if (dcall & (1 << 15)) {
+            inMsg.retransmit = true;
+            console.log(`Retransmit? ${inMsg.dcall}`.bold.underline.magenta);
+        }
+
+        inMsg.timeStamp = msg.readUIntBE(4, 4);
+        inMsg.outboundSeqNo = msg.readUIntBE(8, 1);
+        inMsg.inboundSeqNo = msg.readUIntBE(9, 1);
+        inMsg.cmdType = msg.readUIntBE(11, 1);
+
+        console.log('Source Call:', String(inMsg.scall).yellow);
+        console.log('Dest Call:', String(inMsg.dcall).yellow);
+        // console.log('Timestamp:', inMsg.timeStamp);
+        console.log('Outbound Seq No:', inMsg.outboundSeqNo);
+        console.log('Inbound Seq No:', inMsg.inboundSeqNo);
+        console.log('CMD:', (this.getCmdType(inMsg.cmdType) || "UNKNOWN").green);
 
         // Information elements
         let infoElements = [];
         this.parseInfoElements(msg.slice(12), infoElements);
-        parsed.infoElements = infoElements;
+        inMsg.infoElements = infoElements;
+        inMsg.senderInfo = info;
 
         // Look to see if there's an existing entry for this call
-        parsed.call = this.retrieveCall(parsed);
+        inMsg.call = Call.retrieveCall(inMsg);
 
-        switch (parsed.cmdType) {
-            case this.CMD.REGREL:
-                // TODO
-                this.regReleaseResponse(parsed, info);
-                break;
+        if (inMsg.retransmit) {
+            this.lagOrAckResponse(inMsg, true);
+        }
+
+        switch (inMsg.cmdType) {
             case this.CMD.REGREQ:
-                this.processRegRequest(parsed, info);
+            case this.CMD.REGREL:
+                this.processRegRequest(inMsg);
                 break;
             case this.CMD.PING:
             case this.CMD.POKE:
-                this.pongResponse(parsed, info);
+                this.pongResponse(inMsg);
                 break;
             case this.CMD.LAGRQ:
-                this.lagResponse(parsed, info);
+                this.lagOrAckResponse(inMsg);
+                break;
+            case this.CMD.ACK:
+                this.receiveAck(inMsg);
+                break;
+            case this.CMD.VNAK:
+                this.receiveVnak(inMsg);
+                break;
             default:
                 // Just ignore them
                 break;
         }
+
+        console.log('##############################################');
     },
-    processRegRequest(inMsg, senderInfo) {
-        let verifyRegReq = false;
+    processRegRequest(inMsg) {
+        let challengeResponse = false;
+        let node = null;
+
         /*
             Check to see if this is an initial REGREQ, or an MD5 salted one.
             The first request from Asterisk is REGREQ, which the server responds
@@ -92,36 +118,30 @@ const Iax = {
          */
         _.each(inMsg.infoElements, (v) => {
             if (v.type === this.IE.MD5CHALLENGERESP) {
-                verifyRegReq = true;
+                challengeResponse = v.data;
+            } else if (v.type === this.IE.USERNAME) {
+                node = v.data;
             }
         });
 
         // Authenticate with the MD5 challenge hashed password against our DB
-        if (verifyRegReq) {
-            console.log("#!?!?!?! VERIFYREGREQUEST ?!?!?!?!?");
-            return this.verifyRegRequest(inMsg, senderInfo);
+        if (challengeResponse) {
+            console.log("?!?!?!?!?!?!?! VERIFYREGREQUEST ?!?!?!?!?!?!?!");
+            return this.verifyRegRequest(inMsg, node, challengeResponse);
         }
 
-        this.regRequestResponse(inMsg, senderInfo);
+        this.regRequestResponse(inMsg);
     },
-    regRequestResponse(inMsg, senderInfo) {
-        let sourceDestArr = new Uint16Array([
-            // Turns this into 0x8001. This would normally be easy but JS doesn't have strong typing
-            // or I'm stupid
-            inMsg.call.dst,
-            // FIXME
-            // this.addBitwise(32768, this.generateRandomNumber(1, 65534)), 
-            inMsg.call.src,
-            0,
-            1
-        ]);
-
-        let buffer = Buffer.from(sourceDestArr.buffer).swap16(); // Swap for Endian
-        let randomChallenge = this.generateRandomNumber(100000000, 999999999);
+    regRequestResponse(inMsg) {
+        let buffer = this.getSourceDestBuf(inMsg);
+        let tBuffer = this.getTimeStampBuf(inMsg.call.timeStamp);
+        let randomChallenge = Util.generateRandomNumber(100000000, 999999999);
         let username = this.getNode(inMsg.infoElements);
 
+        inMsg.call.challenge = randomChallenge;
+
         let outMsg = new Uint8Array([
-            inMsg.call.outboundSeqNo,
+            inMsg.call.outboundSeqNo++,
             inMsg.call.inboundSeqNo,
             6, // IAX
             this.CMD.REGAUTH,
@@ -129,7 +149,7 @@ const Iax = {
             this.IE.AUTHMETHODS,
             2, // Length of Auth Method
             0, // Auth method
-            3, // Auth method
+            2, // Auth method
             this.IE.MD5CHALLENGE,
             9, // MD5 Challenge length
             ...Buffer.from(String(randomChallenge)),
@@ -138,25 +158,33 @@ const Iax = {
             ...Buffer.from(String(username))
         ]);
 
-        let outMsgBuf = Buffer.concat([buffer, outMsg]);
-        Server.send(outMsgBuf, senderInfo.address, senderInfo.port);
+        let outMsgBuf = Buffer.concat([buffer, tBuffer, outMsg]);
+        Server.send(outMsgBuf, inMsg.senderInfo.address, inMsg.senderInfo.port);
     },
-    verifyRegRequest(inMsg, senderInfo) {
-        let sourceDestArr = new Uint16Array([
-            inMsg.call.dest,
-            inMsg.call.src,
-            0,
-            1
-        ]);
+    async verifyRegRequest(inMsg, node, challengeResponse) {
+        // May refactor in the future
+        if (inMsg.cmdType === this.CMD.REGREQ) {
+            if (await RegisterApi.register(node, inMsg.call.challenge, challengeResponse.toString(), inMsg.senderInfo.address, inMsg.senderInfo.port)) {
+                return this.regAckResponse(inMsg);
+            }
+        } else if (inMsg.cmdType === this.CMD.REGREL) {
+            if (await RegisterApi.unregister(node, inMsg.call.challenge, challengeResponse.toString(), inMsg.senderInfo.address, inMsg.senderInfo.port)) {
+                return this.regReleaseResponse(inMsg);
+            }
+        }
 
-        let buffer = Buffer.from(sourceDestArr.buffer).swap16(); // Swap for Endian
+        return this.regRejectResponse(inMsg);
+    },
+    regAckResponse(inMsg) {
+        let buffer = this.getSourceDestBuf(inMsg);
+        let tBuffer = this.getTimeStampBuf(inMsg.call.timeStamp);
         let username = this.getNode(inMsg.infoElements);
 
         // Parse IP for sending back PEERADDRESS
-        let ipArr = senderInfo.address.match(/(\d{1,3})/g);
+        let ipArr = inMsg.senderInfo.address.match(/(\d{1,3})/g);
 
         let testArr = [
-            inMsg.call.outboundSeqNo,
+            inMsg.call.outboundSeqNo++,
             inMsg.call.inboundSeqNo,
             6, // IAX
             this.CMD.REGACK,
@@ -175,11 +203,11 @@ const Iax = {
             this.IE.REFRESH,
             2, // Length
             0, // REFRESH time
-            5, // REFRESH time
+            process.env.CLIENT_REFRESH_TIME, // REFRESH time
             this.IE.PEERADDRESS,
             16, // Length
             ...[0x02, 0x00], // Family FIXME
-            ...this.splitIntToByteArray(senderInfo.port),
+            ...Util.splitIntToByteArray(inMsg.senderInfo.port),
             ...ipArr, // Client's IP
             // Padding probably for IPv6
             0,
@@ -193,108 +221,123 @@ const Iax = {
         ];
 
         let outMsg = new Uint8Array(testArr);
-        console.log(outMsg);
-        let outMsgBuf = Buffer.concat([buffer, Buffer.from(outMsg)]);
-        console.log(outMsgBuf.toString('hex'));
-        Server.send(outMsgBuf, senderInfo.address, senderInfo.port);
-
+        let outMsgBuf = Buffer.concat([buffer, tBuffer, Buffer.from(outMsg)]);
+        Server.send(outMsgBuf, inMsg.senderInfo.address, inMsg.senderInfo.port);
     },
-    regReleaseResponse(inMsg, senderInfo) {
-        let sourceDestArr = new Uint16Array([
-            inMsg.call.dest,
-            inMsg.call.src,
-            0,
-            1
-        ]);
-
-        let buffer = Buffer.from(sourceDestArr.buffer).swap16(); // Swap for Endian
-
+    regRejectResponse(inMsg) {
         let outMsg = new Uint8Array([
-            inMsg.call.outboundSeqNo,
+            inMsg.call.outboundSeqNo++,
             inMsg.call.inboundSeqNo,
             6, // IAX
-            this.CMD.PONG,
+            this.CMD.REGREJ,
+            this.IE.CAUSE,
+            18, // Length of string below
+            ...Buffer.from('Password incorrect'),
+            this.IE.CAUSECODE,
+            1, // Length
+            0x1D // Facility Rejected
         ]);
-
-        let outMsgBuf = Buffer.concat([buffer, Buffer.from(outMsg)]);
-        Server.send(outMsgBuf, senderInfo.address, senderInfo.port);
+        
+        let outMsgBuf = Buffer.concat([this.getResponseBuf(inMsg), Buffer.from(outMsg)]);
+        Server.send(outMsgBuf, inMsg.senderInfo.address, inMsg.senderInfo.port);
+    },
+    regReleaseResponse(inMsg) {
+        return this.lagOrAckResponse(inMsg, true, false);
     },
     /**
      * This command only needs the CMD and nothing else to respond
      *
      * @param inMsg
-     * @param senderInfo
+     * @param inMsg.senderInfo
      */
-    pongResponse(inMsg, senderInfo) {
-        let sourceDestArr = new Uint16Array([
-            inMsg.call.dest,
-            inMsg.call.src,
-            0,
-            1
-        ]);
-
-        let buffer = Buffer.from(sourceDestArr.buffer).swap16(); // Swap for Endian
-
+    pongResponse(inMsg) {
         let outMsg = new Uint8Array([
-            inMsg.call.outboundSeqNo,
+            inMsg.call.outboundSeqNo++,
             inMsg.call.inboundSeqNo,
             6, // IAX
             this.CMD.PONG,
         ]);
 
-        let outMsgBuf = Buffer.concat([buffer, Buffer.from(outMsg)]);
-        Server.send(outMsgBuf, senderInfo.address, senderInfo.port);
+        let outMsgBuf = Buffer.concat([this.getResponseBuf(inMsg, true), Buffer.from(outMsg)]);
+        Server.send(outMsgBuf, inMsg.senderInfo.address, inMsg.senderInfo.port);
+        Call.deleteCall(inMsg);
     },
     /**
      * This command differs slightly from PONG, in that it needs the timestamp from the client repeated back
      * @param inMsg
-     * @param senderInfo
+     * @param inMsg.senderInfo
      */
-    lagResponse(inMsg, senderInfo) {
-        let sourceDestArr = new Uint16Array([
-            inMsg.call.dest,
-            inMsg.call.src,
-        ]);
-
-        let tArr = new Uint32Array([inMsg.timeStamp]);
-        let buffer = Buffer.from(sourceDestArr.buffer).swap16(); // Swap for Endian
-        let tBuffer = Buffer.from(tArr.buffer).swap32(); // Swap for Endian
+    lagOrAckResponse(inMsg, ack = false, resetCallSeq = true) {
+        if (ack && resetCallSeq) {
+            Call.resetCallSeq(inMsg);
+        }
 
         let outMsg = new Uint8Array([
-            inMsg.call.outboundSeqNo,
+            inMsg.call.outboundSeqNo++,
             inMsg.call.inboundSeqNo,
             6, // IAX
-            this.CMD.LAGRP,
+            (ack ? this.CMD.ACK : this.CMD.LAGRP)
         ]);
 
-        let outMsgBuf = Buffer.concat([buffer, tBuffer, Buffer.from(outMsg)]);
-        Server.send(outMsgBuf, senderInfo.address, senderInfo.port);
+        let outMsgBuf = Buffer.concat([this.getResponseBuf(inMsg, true), Buffer.from(outMsg)]);
+        Server.send(outMsgBuf, inMsg.senderInfo.address, inMsg.senderInfo.port);
+    },
+    receiveAck(inMsg) {
+        if (!inMsg.call.new) {
+            Call.deleteCall(inMsg);
+            return true;
+        }
+
+        console.error(inMsg.call);
+    },
+    receiveVnak(inMsg) {
+        Call.resetCallSeq(inMsg);
+    },
+    getResponseBuf(inMsg, sendTheirTimestamp = false) {
+        return Buffer.concat([
+            this.getSourceDestBuf(inMsg),
+            this.getTimeStampBuf(sendTheirTimestamp ? inMsg.timeStamp : inMsg.call.timeStamp)
+        ]);
+    },
+    getSourceDestBuf(inMsg) {
+        let sourceDestArr = new Uint16Array([
+            Util.checkAndSetBit(inMsg.call.dcall),
+            inMsg.call.scall,
+        ]);
+
+        return Buffer.from(sourceDestArr.buffer).swap16();
+    },
+    getTimeStampBuf(timeStamp) {
+        let tArr = new Uint32Array([timeStamp]);
+        return Buffer.from(tArr.buffer).swap32(); // Swap for Endian
     },
     parseInfoElements(buffer, infoElements) {
         if (!buffer.length) return false;
 
-        let type = buffer.readUIntBE(0, 1);
-        let length = buffer.readUIntBE(1, 1);
-        let data = buffer.slice(2, 2 + length);
+        try {
+            let type = buffer.readUIntBE(0, 1);
+            let length = buffer.readUIntBE(1, 1);
+            let data = buffer.slice(2, 2 + length);
 
-        infoElements.push({
-            type: type,
-            data: data
-        });
+            infoElements.push({
+                type: type,
+                data: data
+            });
 
-        type = this.getInfoType(type);
-        console.log("Info Type", type || 'UNKNOWN');
-        console.log("Length", length);
-        console.log("Data");
+            let typeStr = this.getInfoType(type);
 
-        if (type === 19) {
-            console.log(data.readUInt16BE(0));
-        } else {
-            console.log(data.toString());
+            if (type !== this.IE.REFRESH && type !== this.IE.CALLTOKEN) {
+                console.log("Info Type", (typeStr || 'UNKNOWN').green);
+                console.log("Length", length.toString().yellow);
+                console.log("Data");
+                console.log(data.toString().green);
+            }
+
+            buffer = buffer.slice(2 + length);
+            this.parseInfoElements(buffer, infoElements);
+        } catch (e) {
+            console.error(e);
         }
-
-        buffer = buffer.slice(2 + length);
-        this.parseInfoElements(buffer, infoElements);
     },
     getNode(infoElements) {
         let node = null;
@@ -325,42 +368,17 @@ const Iax = {
         })
 
         return infoType;
-    },
-    retrieveCall(parsed) {
-
-    },
-    addBitwise(a, b, subtract = false) {
-        while (b !== 0) {
-            let borrow;
-            if (subtract) borrow = (~a) & b;
-            else borrow = a & b;
-            a = a ^ b;
-            b = borrow << 1;
-        }
-
-        return a;
-    },
-    subtractBitwise(a, b) {
-        return addBitwise(a, b, true)
-    },
-    generateRandomNumber(min, max) {
-        return Math.floor(Math.random() * (max - min) + min);
-    },
-    clearBit(n) {
-        return (n ^ (1 << 15));
-    },
-    splitIntToByteArray(input) {
-        return input
-            .toString(16)
-            .match(/.{1,2}/g)
-            .map(b => parseInt(b.padStart(4, '0x')));
-    },
-    bufferToHex(buffer) {
-        return [...new Uint8Array(buffer)]
-            .map(b => b.toString(16).padStart(2, "0"))
-            .join("");
     }
 };
 
-module.exports = Iax;
+Server.init((msg, info) => {
+    try {
+        Iax.receiveMessage(msg, info);
+    } catch (e) {
+        console.error(e);
+    }
+});
 
+setInterval(() => {
+    Call.pruneCalls();
+}, 5000)

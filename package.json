@@ -7,9 +7,12 @@
   "license": "GPL3",
   "dependencies": {
     "axios": "^0.20.0",
+    "colors": "^1.4.0",
     "dgram": "^1.0.1",
     "dotenv": "^8.2.0",
     "lodash": "^4.17.20",
+    "md5": "^2.3.0",
+    "moment": "^2.27.0",
     "network-byte-order": "^0.2.0",
     "randomstring": "^1.1.5"
   }
