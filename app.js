@@ -16,4 +16,4 @@ Server.init((msg, info) => {
 
 setInterval(() => {
     Call.pruneCalls();
-}, 5000)
+}, process.env.CALL_TTL * 1000)
