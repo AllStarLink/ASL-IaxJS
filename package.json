@@ -4,14 +4,16 @@
   "main": "server.js",
   "repository": "git@github.com:robvella/allstar-iaxjs.git",
   "author": "Rob Vella <me@robvella.com>",
-  "license": "GPL3",
+  "license": "GPL-3.0-only",
   "dependencies": {
+    "async-redis": "^1.1.7",
     "axios": "^0.20.0",
     "colors": "^1.4.0",
     "dgram": "^1.0.1",
     "dotenv": "^8.2.0",
     "lodash": "^4.17.20",
     "moment": "^2.27.0",
-    "randomstring": "^1.1.5"
+    "randomstring": "^1.1.5",
+    "redis": "^3.0.2"
   }
 }
