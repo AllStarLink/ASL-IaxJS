@@ -28,7 +28,7 @@ if (cluster.isMaster) {
         port: process.env.REDIS_PORT,
         // password: process.env.REDIS_PASSWORD || undefined
     });
-
+   
     const Server = require('./lib/Server.js');
     const Iax = new (require('./lib/Iax'));
     
