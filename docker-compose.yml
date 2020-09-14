@@ -7,3 +7,6 @@ services:
       - .:/app
     command: >
       bash -xc 'npm i -g cross-env yarn ; cd /app ; yarn --no-bin-links; yarn start'
+networks:
+  default:
+    name: "register"
