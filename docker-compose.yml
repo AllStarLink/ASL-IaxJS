@@ -4,11 +4,11 @@ services:
     container_name: iaxjs
     image: node:12-buster
     ports:
-      - 4569:4569
+      - 4569:4569/udp
     volumes:
       - .:/app
     command: >
-      bash -xc 'npm i -g cross-env yarn ; cd /app ; yarn --no-bin-links; yarn start'
+      bash -xc 'npm i -g cross-env ; cd /app ; yarn --no-bin-links; yarn start'
 networks:
   default:
     name: "register"
