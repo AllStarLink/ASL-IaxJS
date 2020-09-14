@@ -3,7 +3,15 @@
   "version": "0.0.1",
   "main": "server.js",
   "repository": "git@github.com:robvella/allstar-iaxjs.git",
+  "copyright": "AllStarLink, Inc",
   "author": "Rob Vella <me@robvella.com>",
+  "engines": {
+    "node": "12.x",
+    "yarn": ">=1.0.0 <2.0.0"
+  },
+  "scripts": {
+    "start": "node iaxServer.js"
+  },
   "license": "GPL-3.0-only",
   "dependencies": {
     "async-redis": "^1.1.7",
