@@ -1,0 +1,9 @@
+version: "3"
+services:
+  iaxjs:
+    container_name: iaxjs
+    image: node:12-buster
+    volumes:
+      - .:/app
+    command: >
+      bash -xc 'npm i -g cross-env yarn ; cd /app ; yarn --no-bin-links; yarn start'
