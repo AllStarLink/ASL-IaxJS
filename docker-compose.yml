@@ -3,6 +3,8 @@ services:
   iaxjs:
     container_name: iaxjs
     image: node:12-buster
+    ports:
+      - 4569:4569
     volumes:
       - .:/app
     command: >
