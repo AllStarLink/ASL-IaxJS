@@ -3,8 +3,6 @@ services:
   iaxjs:
     container_name: iaxjs
     image: node:12-buster
-    extra_hosts:
-      - "register1.allstarlink.net:10.128.0.6"
     ports:
       - 4569:4569/udp
     volumes:
