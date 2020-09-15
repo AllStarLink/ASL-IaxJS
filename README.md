@@ -2,6 +2,7 @@
 
 Multi-threaded IAX2 Registration Server. Performs IAX2 registrations for Asterisk clients.
 
-Author: Rob Vella, KK9ROB
+## Authors
+Rob Vella, KK9ROB <me@robvella.com>
 
-(C) 2020 AllStarLink, Inc
+Copyright (C) 2020 AllStarLink, Inc

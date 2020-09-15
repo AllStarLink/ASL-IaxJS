@@ -2,11 +2,10 @@
 /**
  * IAX2 Server for Registrations
  *
- * @author Rob Vella KK9ROB <me@robvella.com>
- * @copyright AllStarLink, Inc
+ * @author Rob Vella, KK9ROB <me@robvella.com>
+ * @copyright Copyright (c) 2020 AllStarLink, Inc
  * @license GPL-3.0-only
  */
-
 require('dotenv').config({ path: __dirname + '/.env' });
 
 const cluster = require('cluster');

@@ -3,8 +3,8 @@
   "version": "0.0.1",
   "main": "server.js",
   "repository": "git@github.com:robvella/allstar-iaxjs.git",
-  "copyright": "AllStarLink, Inc",
-  "author": "Rob Vella <me@robvella.com>",
+  "copyright": "Copyright (c) 2020 AllStarLink, Inc",
+  "author": "Rob Vella, KK9ROB <me@robvella.com>",
   "engines": {
     "node": "12.x",
     "yarn": ">=1.0.0 <2.0.0"
