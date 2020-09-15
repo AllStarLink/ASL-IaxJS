@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 /**
  * IAX2 Server for Registrations
  *
@@ -6,7 +7,7 @@
  * @license GPL-3.0-only
  */
 
-require('dotenv').config();
+require('dotenv').config({ path: __dirname + '/.env' });
 
 const cluster = require('cluster');
 const colors = require('colors');
