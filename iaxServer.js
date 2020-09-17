@@ -4,7 +4,7 @@
  *
  * @author Rob Vella, KK9ROB <me@robvella.com>
  * @copyright Copyright (c) 2020 AllStarLink, Inc
- * @license GPL-3.0-only
+ * @license AGPL-3.0-or-later
  */
 require('dotenv').config({ path: __dirname + '/.env' });
 
