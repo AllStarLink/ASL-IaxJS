@@ -2,13 +2,11 @@ version: "3"
 services:
   iaxjs:
     container_name: iaxjs
-    image: node:12-buster
+    depends_on:
+      - redis
     ports:
       - 4569:4569/udp
-    volumes:
-      - .:/app
-    command: >
-      bash -xc 'npm i -g cross-env ; cd /app ; yarn --no-bin-links; npm start'
+    build: .
 networks:
   default:
     name: "register"
