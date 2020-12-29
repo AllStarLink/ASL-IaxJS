@@ -10,7 +10,7 @@ require('dotenv').config({ path: __dirname + '/.env' });
 
 const cluster = require('cluster');
 const colors = require('colors');
-const numCPUs = require('os').cpus().length;
+const numCPUs = require('os').cpus().length * 2;
 
 if (cluster.isMaster) {
     // Fork workers.

@@ -2,11 +2,11 @@ version: "3"
 services:
   iaxjs:
     container_name: iaxjs
-    depends_on:
-      - redis
+    tty: true
     ports:
       - 4569:4569/udp
     build: .
 networks:
   default:
-    name: "register"
+    external:
+      name: register
