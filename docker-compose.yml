@@ -3,10 +3,6 @@ services:
   iaxjs:
     container_name: iaxjs
     tty: true
-    ports:
-      - 4569:4569/udp
+    restart: unless-stopped
+    network_mode: host
     build: .
-networks:
-  default:
-    external:
-      name: register
