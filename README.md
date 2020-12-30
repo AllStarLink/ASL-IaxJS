@@ -3,7 +3,8 @@
 Multi-threaded IAX2 Registration Server. Performs IAX2 registrations for Asterisk clients.
 
 ## Authors
-Rob Vella, KK9ROB <me@robvella.com>
+* Rob Vella, KK9ROB <me@robvella.com>
+* Jason VE3YCA
 
 ## License
 GNU Affero 3.0 or later
