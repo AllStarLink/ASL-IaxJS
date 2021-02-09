@@ -10,9 +10,11 @@ require('dotenv').config({ path: __dirname + '/.env' });
 
 const cluster = require('cluster');
 const colors = require('colors');
-const numCPUs = require('os').cpus().length * 4;
+const numCPUs = require('os').cpus().length * process.env.CPU_MULTIPLIER;
 
 if (cluster.isMaster) {
+    console.log('Starting ' + numCPUs + ' forks');
+
     // Fork workers.
     for (let i = 0; i < numCPUs; i++) {
         cluster.fork();
@@ -41,7 +43,7 @@ if (cluster.isMaster) {
             } catch (e) {
                 console.error(e);
             }
-        });
+        }, process.env.LISTEN_PORT);
     })
 }
 
