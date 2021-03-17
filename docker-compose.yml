@@ -2,6 +2,7 @@ version: "3"
 services:
   iaxjs:
     container_name: iaxjs
+    hostname: iaxjs
     tty: true
     restart: unless-stopped
     network_mode: host
